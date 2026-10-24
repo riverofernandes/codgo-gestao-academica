@@ -19,6 +19,7 @@ const TITULO_ERRO: Record<string, string> = {
   IA_INDISPONIVEL: 'Assistente indisponível no momento.',
   IA_TIMEOUT: 'O assistente demorou demais para responder.',
   IA_RECUSOU: 'O assistente não conseguiu responder.',
+  LIMITE_EXCEDIDO: 'Limite de perguntas atingido.',
   VALIDACAO: 'Pergunta inválida.',
   ALUNO_NAO_ENCONTRADO: 'Aluno não encontrado.',
 };

@@ -1,5 +1,7 @@
 # Gestão Acadêmica com Assistente de IA — Desafio Codgo.X
 
+[![CI](https://github.com/riverofernandes/codgo-gestao-academica/actions/workflows/ci.yml/badge.svg)](https://github.com/riverofernandes/codgo-gestao-academica/actions/workflows/ci.yml)
+
 Aplicação full stack para consultar alunos, visualizar a situação financeira e fazer perguntas a um assistente de IA (Anthropic Claude) sobre os dados acadêmicos **fictícios**.
 
 - **Back-end:** Node.js + Express + TypeScript (`backend/`)
@@ -41,6 +43,8 @@ Outros comandos (na raiz):
 | `ANTHROPIC_API_KEY` | _(vazia)_ | Sem ela, o assistente roda em **modo demonstrativo** |
 | `ANTHROPIC_MODEL` | `claude-opus-5-5` | Modelo usado |
 | `ASSISTENTE_TIMEOUT_MS` | `30000` | Timeout da chamada ao LLM |
+| `ASSISTENTE_LIMITE_REQUISICOES` | `10` | Máximo de perguntas ao assistente por IP na janela |
+| `ASSISTENTE_LIMITE_JANELA_MS` | `60000` | Janela do limite (ms) |
 | `ASSISTENTE_MODO` | — | `demonstrativo` força o modo local mesmo com chave |
 | `TZ_NEGOCIO` | `America/Sao_Paulo` | Fuso usado para definir "hoje" na regra de vencimento |
 | `PORT` | `3333` | Porta da API |
@@ -56,7 +60,9 @@ Outros comandos (na raiz):
 | Item | Situação |
 |---|---|
 | API REST (`/api/alunos`, `/api/alunos/:id`, `/api/alunos/:id/financeiro`, `/api/assistente`) | ✅ Implementado |
-| Validação (zod), envelope de erro único, 400/404/500/502/503/504 | ✅ Implementado |
+| Validação (zod), envelope de erro único, 400/404/429/500/502/503/504 | ✅ Implementado |
+| Limite de requisições no assistente (429 + `Retry-After`) | ✅ Implementado |
+| CI no GitHub Actions (typecheck, testes e build em Node 22 e 24) | ✅ Implementado |
 | Dados fictícios em memória (12 alunos) | ✅ Implementado |
 | Regra de situação financeira + testes automatizados | ✅ Implementado |
 | Integração real com Claude (SDK oficial, timeout, retry, tratamento de erros, recusa) | ✅ Implementado — **ativa quando `ANTHROPIC_API_KEY` está definida**. Validado com chave real (`claude-haiku-5-5`, respostas em ~1–2 s): perguntas do enunciado, resumo do aluno selecionado, pergunta sem aluno selecionado, dados inexistentes (CPF, notas, 2019 → responde que não há a informação) e tentativa de prompt injection (recusada). Também com SDK mockado (recusa, timeout, falha de conexão), chave inválida (→ 503) e timeout de 1 ms (→ 504) |
@@ -76,7 +82,7 @@ Contrato completo em [`docs/API.md`](docs/API.md). Resumo:
 | GET | `/api/alunos?busca=` | 200 · 400 (busca > 100 chars) |
 | GET | `/api/alunos/:id` | 200 · 400 (id inválido) · 404 |
 | GET | `/api/alunos/:id/financeiro` | 200 · 400 · 404 |
-| POST | `/api/assistente` `{ pergunta, alunoId? }` | 200 · 400 · 404 · 502 (recusa) · 503 (IA indisponível) · 504 (timeout) |
+| POST | `/api/assistente` `{ pergunta, alunoId? }` | 200 · 400 · 404 · 429 (limite) · 502 (recusa) · 503 (IA indisponível) · 504 (timeout) |
 | GET | `/api/saude` | 200 (modo do assistente e data de referência) |
 
 Erros sempre no formato `{ "erro": { "codigo": "...", "mensagem": "..." } }`, sem stack trace.
@@ -102,6 +108,7 @@ Erros sempre no formato `{ "erro": { "codigo": "...", "mensagem": "..." } }`, se
 - **Falhas tratadas:** timeout → 504; falha de conexão, chave inválida, rate limit, erro 5xx → 503; recusa do modelo (`stop_reason: "refusal"`) → 502. Usa as classes de erro tipadas do SDK, `maxRetries: 1` e timeout configurável. Detalhes técnicos vão para o log do servidor, nunca para o cliente.
 - **Recusa:** a chamada usa `fallbacks: "default"` (beta `server-side-fallback-2026-07-01`) — se um classificador de segurança recusar, a própria API re-executa em um modelo de fallback.
 - **Custo/latência:** `output_config.effort: "low"` — perguntas factuais sobre poucos dados não precisam de raciocínio profundo.
+- **Limite de uso:** o `/api/assistente` aceita no máximo 10 perguntas por minuto por IP (configurável). Acima disso responde `429 LIMITE_EXCEDIDO` com `Retry-After`, protegendo o custo do LLM contra abuso ou loops no cliente. O limite fica em memória — suficiente para uma instância; com várias instâncias, usaria um store compartilhado (ex.: Redis).
 
 ---
 
@@ -133,7 +140,7 @@ A situação financeira era tratada como um **dado armazenado ou inferido de um 
 ### Como evitaria a reincidência
 
 - **Fonte única de verdade:** status financeiro é sempre derivado (função pura, um lugar só), nunca persistido como verdade; se for necessário cache/denormalização, recalcular por evento (pagamento registrado, virada do dia) e reconciliar com job diário.
-- **Testes de regressão** com o cenário do bug rodando no CI (`npm test`) e bloqueando merge.
+- **Testes de regressão** com o cenário do bug rodando no CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml): typecheck, testes e build a cada push e pull request). Com proteção de branch exigindo o CI verde, uma regressão não entra na `main`.
 - **Contrato claro:** a API devolve a situação calculada; o front não tem lógica de negócio duplicada.
 - **Datas sem horário e "hoje" injetável**, evitando bugs de fuso e tornando o comportamento testável.
 - **Observabilidade:** um relatório/alerta comparando status persistido (legado) × status calculado ajudaria a detectar divergências em produção.
@@ -146,8 +153,10 @@ A situação financeira era tratada como um **dado armazenado ou inferido de um 
 npm test
 ```
 
+Os mesmos comandos (`typecheck`, `test`, `build`) rodam no **GitHub Actions** a cada push e pull request, em Node 22 e 24.
+
 - `backend/test/financeiro.test.ts` — regra financeira (9 cenários).
-- `backend/test/api.test.ts` — endpoints, validações (incl. ids estritos: `1e1`, `0x3`, `true` → 400), 400/404/500/503, regressão do bug, modo demonstrativo.
+- `backend/test/api.test.ts` — endpoints, validações (incl. ids estritos: `1e1`, `0x3`, `true` → 400), 400/404/429/500/503, regressão do bug, modo demonstrativo.
 - `backend/test/seed.test.ts` — garante que o seed relativo funciona em **qualquer dia** (2 anos simulados): competências únicas, nenhum pagamento no futuro e sempre os mesmos 6 inadimplentes.
 - `backend/test/assistente.test.ts` — minimização do contexto enviado à IA, seleção de provedor, SDK mockado (resposta, recusa, timeout, falha de conexão). **Nenhum teste chama a API real.**
 - `frontend/src/**/*.test.ts(x)` — formatação de moeda/data e componentes com `fetch` mockado.

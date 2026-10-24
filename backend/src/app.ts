@@ -1,21 +1,49 @@
 import express, { Router } from "express";
+import { rateLimit } from "express-rate-limit";
 import { montarContexto } from "./assistente/contexto.js";
 import type { ProvedorAssistente } from "./assistente/tipos.js";
 import { ErroHttp, naoEncontrada, tratarErros } from "./http/erros.js";
 import { assistenteSchema, buscaSchema, idSchema, validar } from "./http/validacao.js";
 import type { AlunosRepository } from "./repositories/alunosRepository.js";
 
+export interface LimiteAssistente {
+  /** Máximo de perguntas por IP dentro da janela. */
+  maximo: number;
+  janelaMs: number;
+}
+
 export interface Dependencias {
   repo: AlunosRepository;
   assistente: ProvedorAssistente;
+  limiteAssistente?: LimiteAssistente;
 }
 
-export function criarApp({ repo, assistente }: Dependencias) {
+export const LIMITE_ASSISTENTE_PADRAO: LimiteAssistente = { maximo: 10, janelaMs: 60_000 };
+
+export function criarApp({ repo, assistente, limiteAssistente = LIMITE_ASSISTENTE_PADRAO }: Dependencias) {
   const app = express();
   app.disable("x-powered-by");
   app.use(express.json({ limit: "10kb" }));
 
   const api = Router();
+
+  // Cada pergunta ao LLM tem custo: limita por IP para conter abuso e gasto inesperado.
+  const limitarAssistente = rateLimit({
+    windowMs: limiteAssistente.janelaMs,
+    limit: limiteAssistente.maximo,
+    standardHeaders: "draft-8", // RateLimit / RateLimit-Policy + Retry-After
+    legacyHeaders: false,
+    handler: (_req, _res, next) => {
+      const segundos = Math.ceil(limiteAssistente.janelaMs / 1000);
+      next(
+        new ErroHttp(
+          429,
+          "LIMITE_EXCEDIDO",
+          `Muitas perguntas em pouco tempo (máximo de ${limiteAssistente.maximo} a cada ${segundos} s). Aguarde um pouco e tente novamente.`,
+        ),
+      );
+    },
+  });
 
   api.get("/saude", (_req, res) => {
     res.json({ dados: { ok: true, modoAssistente: assistente.modo, dataReferencia: repo.dataReferencia() } });
@@ -41,7 +69,7 @@ export function criarApp({ repo, assistente }: Dependencias) {
     res.json({ dados: financeiro });
   });
 
-  api.post("/assistente", async (req, res, next) => {
+  api.post("/assistente", limitarAssistente, async (req, res, next) => {
     try {
       const { pergunta, alunoId } = validar(assistenteSchema, req.body ?? {});
       if (alunoId != null && !repo.buscarPorId(alunoId)) {

@@ -151,3 +151,18 @@ describe("validação estrita de ids (regressão encontrada no QA)", () => {
     expect(res.body.erro.mensagem).toMatch(/objeto JSON/);
   });
 });
+
+describe("limite de requisições do assistente", () => {
+  it("retorna 429 LIMITE_EXCEDIDO com Retry-After ao passar do limite, sem afetar outras rotas", async () => {
+    const repo = new AlunosRepository(gerarAlunos(HOJE), () => HOJE);
+    const app = criarApp({ repo, assistente: new AssistenteDemonstrativo(), limiteAssistente: { maximo: 2, janelaMs: 60_000 } });
+
+    await request(app).post("/api/assistente").send({ pergunta: "Quantos alunos?" }).expect(200);
+    await request(app).post("/api/assistente").send({ pergunta: "Quantos alunos?" }).expect(200);
+    const res = await request(app).post("/api/assistente").send({ pergunta: "Quantos alunos?" }).expect(429);
+
+    expect(res.body).toEqual({ erro: { codigo: "LIMITE_EXCEDIDO", mensagem: expect.stringContaining("máximo de 2") } });
+    expect(Number(res.headers["retry-after"])).toBeGreaterThan(0);
+    await request(app).get("/api/alunos").expect(200);
+  });
+});

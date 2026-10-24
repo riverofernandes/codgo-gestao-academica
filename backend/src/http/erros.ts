@@ -4,6 +4,7 @@ export type CodigoErro =
   | "VALIDACAO"
   | "ALUNO_NAO_ENCONTRADO"
   | "ROTA_NAO_ENCONTRADA"
+  | "LIMITE_EXCEDIDO"
   | "IA_INDISPONIVEL"
   | "IA_TIMEOUT"
   | "IA_RECUSOU"

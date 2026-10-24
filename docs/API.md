@@ -63,7 +63,7 @@ Erro (todos os endpoints):
 ```
 
 Códigos: `VALIDACAO` (400), `ALUNO_NAO_ENCONTRADO` (404), `ROTA_NAO_ENCONTRADA` (404),
-`IA_INDISPONIVEL` (503), `IA_TIMEOUT` (504), `IA_RECUSOU` (502), `ERRO_INTERNO` (500).
+`LIMITE_EXCEDIDO` (429), `IA_INDISPONIVEL` (503), `IA_TIMEOUT` (504), `IA_RECUSOU` (502), `ERRO_INTERNO` (500).
 
 ## Endpoints
 
@@ -93,5 +93,5 @@ Body: `{ "pergunta": string (1–500 chars, trim), "alunoId"?: number }`
 }
 ```
 
-Erros: `400 VALIDACAO`, `404 ALUNO_NAO_ENCONTRADO`, `503 IA_INDISPONIVEL`, `504 IA_TIMEOUT`, `502 IA_RECUSOU`.
+Erros: `400 VALIDACAO`, `404 ALUNO_NAO_ENCONTRADO`, `429 LIMITE_EXCEDIDO` (padrão: 10 perguntas por minuto por IP; resposta traz `Retry-After`), `503 IA_INDISPONIVEL`, `504 IA_TIMEOUT`, `502 IA_RECUSOU`.
 Não há fallback silencioso: se o LLM falhar, a API retorna erro; o modo demonstrativo só é usado quando não há chave configurada (e a resposta vem marcada com `modo: "demonstrativo"`).
