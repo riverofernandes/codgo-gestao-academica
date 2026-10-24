@@ -59,7 +59,7 @@ Outros comandos (na raiz):
 | Validação (zod), envelope de erro único, 400/404/500/502/503/504 | ✅ Implementado |
 | Dados fictícios em memória (12 alunos) | ✅ Implementado |
 | Regra de situação financeira + testes automatizados | ✅ Implementado |
-| Integração real com Claude (SDK oficial, timeout, retry, tratamento de erros, recusa) | ✅ Implementado — **ativa quando `ANTHROPIC_API_KEY` está definida**. Validado com SDK mockado (resposta, recusa, timeout, falha de conexão), com chave inválida (→ 503) e timeout de 1 ms (→ 504). **Não foi executado com uma chave válida** durante o desenvolvimento (não havia chave disponível) |
+| Integração real com Claude (SDK oficial, timeout, retry, tratamento de erros, recusa) | ✅ Implementado — **ativa quando `ANTHROPIC_API_KEY` está definida**. Validado com chave real (`claude-haiku-5-5`, respostas em ~1–2 s): perguntas do enunciado, resumo do aluno selecionado, pergunta sem aluno selecionado, dados inexistentes (CPF, notas, 2019 → responde que não há a informação) e tentativa de prompt injection (recusada). Também com SDK mockado (recusa, timeout, falha de conexão), chave inválida (→ 503) e timeout de 1 ms (→ 504) |
 | Modo demonstrativo (sem chave) | ⚠️ **Demonstrativo**: não chama LLM. Reconhece algumas intenções por palavra-chave (inadimplentes, adimplentes, contagem por status de matrícula, resumo do aluno selecionado) e responde com os **dados reais**. Toda resposta vem com `modo: "demonstrativo"` e um selo na interface |
 | Front-end: listagem, busca (nome/matrícula), detalhes, financeiro, assistente, loading/erro/vazio | ✅ Implementado |
 
