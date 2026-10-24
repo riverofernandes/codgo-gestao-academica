@@ -11,7 +11,7 @@ Aplicação full stack para consultar alunos, visualizar a situação financeira
 
 ## Como executar localmente
 
-Pré-requisito: **Node.js 20+** (testado com Node 25 / npm 11).
+Pré-requisito: **Node.js 22.12+** (testado com Node 25 / npm 11).
 
 ```bash
 npm install            # instala back-end e front-end (npm workspaces)
