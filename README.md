@@ -45,6 +45,8 @@ Outros comandos (na raiz):
 | `TZ_NEGOCIO` | `America/Sao_Paulo` | Fuso usado para definir "hoje" na regra de vencimento |
 | `PORT` | `3333` | Porta da API |
 
+**Solução de problemas:** se toda pergunta retornar 503, veja o log da API — o motivo real (ex.: chave inválida, modelo indisponível na conta, parâmetro rejeitado) é registrado lá, sem expor a chave. A chamada usa `fallbacks: "default"` com o beta `server-side-fallback-2026-07-01`; se sua conta não aceitar esse beta, remova essas duas linhas em `backend/src/assistente/claude.ts`. Para testar a interface sem IA, use `ASSISTENTE_MODO=demonstrativo`.
+
 > A chave existe **somente** em `backend/.env` (ignorado pelo git). Não há variáveis `VITE_*` com segredos — tudo que começa com `VITE_` é embutido no bundle do navegador.
 
 ---
@@ -57,7 +59,7 @@ Outros comandos (na raiz):
 | Validação (zod), envelope de erro único, 400/404/500/502/503/504 | ✅ Implementado |
 | Dados fictícios em memória (12 alunos) | ✅ Implementado |
 | Regra de situação financeira + testes automatizados | ✅ Implementado |
-| Integração real com Claude (SDK oficial, timeout, retry, tratamento de erros, recusa) | ✅ Implementado — **ativa quando `ANTHROPIC_API_KEY` está definida** |
+| Integração real com Claude (SDK oficial, timeout, retry, tratamento de erros, recusa) | ✅ Implementado — **ativa quando `ANTHROPIC_API_KEY` está definida**. Validado com SDK mockado (resposta, recusa, timeout, falha de conexão), com chave inválida (→ 503) e timeout de 1 ms (→ 504). **Não foi executado com uma chave válida** durante o desenvolvimento (não havia chave disponível) |
 | Modo demonstrativo (sem chave) | ⚠️ **Demonstrativo**: não chama LLM. Reconhece algumas intenções por palavra-chave (inadimplentes, adimplentes, contagem por status de matrícula, resumo do aluno selecionado) e responde com os **dados reais**. Toda resposta vem com `modo: "demonstrativo"` e um selo na interface |
 | Front-end: listagem, busca (nome/matrícula), detalhes, financeiro, assistente, loading/erro/vazio | ✅ Implementado |
 
@@ -87,7 +89,7 @@ Erros sempre no formato `{ "erro": { "codigo": "...", "mensagem": "..." } }`, se
 - **Situação financeira derivada, nunca armazenada.** É calculada a cada leitura a partir das parcelas (vencimento + valor pago). O front-end apenas exibe o que a API devolve.
 - **"Hoje" injetado.** A regra recebe a data de referência como parâmetro (`hoje`), o servidor usa a data no fuso de negócio. Datas são strings `YYYY-MM-DD` comparadas lexicograficamente — evita bugs de fuso (`new Date("2026-10-10")` é dia 09 no Brasil).
 - **Dinheiro em centavos (inteiros)** para evitar erros de ponto flutuante.
-- **Seed com datas relativas:** os vencimentos são deslocamentos em dias a partir da data em que a API sobe. Com datas fixas, em poucas semanas todos os alunos virariam inadimplentes e a demonstração perderia sentido.
+- **Seed com datas relativas:** uma parcela por mês (de 3 meses atrás a 1 mês à frente), ancorada 5 dias antes da data em que a API sobe — a parcela do mês corrente está sempre vencida e a do próximo mês sempre a vencer. Com datas fixas, em poucas semanas todos os alunos virariam inadimplentes e a demonstração perderia sentido. Um teste simula 2 anos de datas para garantir o comportamento estável.
 - **Status de matrícula ≠ situação financeira.** `status` (ativa/trancada/cancelada/formada) e `situacaoFinanceira` (adimplente/inadimplente) são campos separados, tanto na API quanto no prompt da IA.
 - **Busca no servidor**, sem acento e sem diferenciar maiúsculas (nome) ou por matrícula; o front usa debounce e cancela requisições obsoletas.
 - **Provedor de IA abstrato** (`ProvedorAssistente`): Claude e modo demonstrativo implementam a mesma interface; trocar de LLM é trocar uma classe.
